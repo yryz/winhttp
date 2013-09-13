@@ -1,6 +1,6 @@
 {
   -----------------------------------------------
-  #         WinHttp v0.2h                       -
+  #         WinHttp v0.2i                       -
   #                                             -
   #        by: yryz                             -
   #     email: yryznet@qq.com                   -
@@ -16,19 +16,24 @@ uses
   Windows, SysUtils, Classes, WinHttp_h, ShellAPI, SHFolder, CookieMgr_u,
   FuncLib;
 
-{ HTTP DATA }
 type
+{$IFNDEF UNICODE}
+  RawByteString = AnsiString;
+{$ENDIF}
+  TCodePage = (cpNone, cpGBK, cpUTF8, cpBig5, cpAuto);
+
+{ HTTP DATA }
   TUrlEncodedData = class
   private
     FData: TStrings;
-    FCodePageUTF8: Boolean;
+    FCodePage: TCodePage;
     FUrlEncoded: Boolean;
   public
-    constructor Create(cpUTF8: Boolean; UrlEncoded: Boolean);
+    constructor Create(CodePage: TCodePage; UrlEncoded: Boolean);
     destructor Destroy; override;
     function Put(Name, Value: string): TUrlEncodedData; overload;
     function Put(Name: string; Value: Integer): TUrlEncodedData; overload;
-    function ToString: string; {$IFDEF UNICODE}override;{$ENDIF}
+    function ToString: RawByteString; {$IFDEF UNICODE}reintroduce;{$ENDIF}
     property Data: TStrings read FData;
   end;
 
@@ -42,11 +47,11 @@ type
   private
     FData: TBytes;
     FMaked: Boolean;
-    FCodePageUTF8: Boolean;
+    FCodePage: TCodePage;
     procedure Append(AData: string); overload;
     procedure Append(const AData; ASize: Integer); overload;
   public
-    constructor Create(cpUTF8: Boolean);
+    constructor Create(CodePage: TCodePage);
     destructor Destroy; override;
     function Add(Name, Value: string): TMultipartData; overload;
     function Add(Name: string; Value: Integer): TMultipartData; overload;
@@ -66,11 +71,6 @@ const
   REQ_ACCEPT_ENCODING_RAW: PWideChar = 'Accept-Encoding: gzip, deflate';
 
 type
-{$IFNDEF UNICODE}
-  RawByteString = AnsiString;
-{$ENDIF}
-  TCodePage = (cpNone, cpGBK, cpUTF8, cpBig5, cpAuto);
-
   TCookieMgr = CookieMgr_u.TCookieMgr;
 
   THTTP = class
@@ -173,11 +173,11 @@ type
     function Get(const sUrl, sSaveFile: string): DWORD; overload;
     function Get(const sUrl: string; var Stream: TStream): DWORD; overload;
      
-    function Post(const sUrl: string; sData: AnsiString;
+    function Post(const sUrl: string; sData: RawByteString;
       ResponseCodePage: TCodePage = cpNone): RawByteString; overload;
     function Post(const sUrl: string; lpData: Pointer; dwLen: DWORD;
       ResponseCodePage: TCodePage = cpNone): RawByteString; overload;
-    function Post(const sUrl: string; sData: AnsiString; sContentType: string;
+    function Post(const sUrl: string; sData: RawByteString; sContentType: string;
       ResponseCodePage: TCodePage = cpNone): RawByteString; overload;
     function Post(const sUrl: string; lpData: Pointer; dwLen: DWORD; sContentType: string;
       ResponseCodePage: TCodePage = cpNone): RawByteString; overload;
@@ -278,7 +278,8 @@ begin
   FCodePage := cpNone;
 end;
 
-class function THTTP.CodePageDec;
+class function THTTP.CodePageDec(ASrc: RawByteString; codePage: TCodePage)
+      : RawByteString;
 begin
   case codePage of
     cpGBK:
@@ -296,7 +297,8 @@ begin
   end;
 end;
 
-class function THTTP.CodePageEnc;
+class function THTTP.CodePageEnc(ASrc: RawByteString; codePage: TCodePage)
+      : RawByteString;
 begin
   case codePage of
     cpGBK:
@@ -711,7 +713,7 @@ begin
   end;
 end;
 
-function THTTP.Post(const sUrl: string; sData: AnsiString;
+function THTTP.Post(const sUrl: string; sData: RawByteString;
   ResponseCodePage: TCodePage = cpNone): RawByteString;
 begin
   Result := Post(sUrl, Pointer(sData), Length(sData), ResponseCodePage);
@@ -736,7 +738,7 @@ begin
   end;
 end;
 
-function THTTP.Post(const sUrl: string; sData: AnsiString;
+function THTTP.Post(const sUrl: string; sData: RawByteString;
   sContentType: string; ResponseCodePage: TCodePage): RawByteString;
 begin
   Result := Post(sUrl, Pointer(sData), Length(sData), sContentType, ResponseCodePage);
@@ -810,7 +812,8 @@ end;
 
 { ¾²Ì¬Ààº¯Êý }
 
-class function THTTP.URLEnc; // 20100923 Fix Unicode
+class function THTTP.URLEnc(ASrc: RawByteString; codePage: TCodePage = cpNone)
+      : RawByteString; // 20100923 Fix Unicode
 const
   ANSI_HEX: array [0 .. 15] of AnsiChar = '0123456789ABCDEF';
 
@@ -845,7 +848,8 @@ begin
   SetLength(Result, pDst - Pointer(Result));
 end;
 
-class function THTTP.URLDec;
+class function THTTP.URLDec(ASrc: RawByteString; codePage: TCodePage = cpNone)
+      : RawByteString;
 var
   i: integer;
   ESC: RawByteString;
@@ -1185,9 +1189,9 @@ end;
 
 { TUrlEncodedData }
 
-constructor TUrlEncodedData.Create(cpUTF8: Boolean; UrlEncoded: Boolean);
+constructor TUrlEncodedData.Create(CodePage: TCodePage; UrlEncoded: Boolean);
 begin
-  FCodePageUTF8 := cpUTF8;
+  FCodePage := CodePage;
   FUrlEncoded := UrlEncoded;
   FData := TStringList.Create;
   FData.LineBreak := '&';
@@ -1201,10 +1205,8 @@ end;
 
 function TUrlEncodedData.Put(Name, Value: string): TUrlEncodedData;
 begin
-  if FCodePageUTF8 then
-    Value := UTF8Encode(Value);
   if FUrlEncoded then
-    Value := THTTP.URLEnc(Value);
+    Value := THTTP.URLEnc(Value, FCodePage);
   FData.Values[Name] := Value;
   Result := Self;
 end;
@@ -1215,16 +1217,18 @@ begin
   Result := Self;
 end;
 
-function TUrlEncodedData.ToString: string;
+function TUrlEncodedData.ToString: RawByteString;
 begin
   Result := FData.Text;
+  if not FUrlEncoded then
+    Result := THTTP.CodePageEnc(Result, FCodePage);
 end;
 
 { TMultipartData }
 
-constructor TMultipartData.Create(cpUTF8: Boolean);
+constructor TMultipartData.Create(CodePage: TCodePage);
 begin
-  FCodePageUTF8 := cpUTF8;
+  FCodePage := CodePage;
 end;
 
 destructor TMultipartData.Destroy;
@@ -1236,8 +1240,6 @@ end;
 function TMultipartData.Add(Name, Value: string): TMultipartData;
 begin
   Assert(not FMaked);
-  if FCodePageUTF8 then
-    Value := UTF8Encode(Value);
   Append(
     MULTIPART_DATA_CRLF
     + 'Content-Disposition: form-data; name="' + Name + '"'#13#10#13#10
@@ -1276,11 +1278,15 @@ begin
 end;
 
 procedure TMultipartData.Append(AData: string);
+var
+  LData: RawByteString;
 begin
   if Length(AData) = 0 then
     Exit;
 
-  Append(AData[1], Length(AData));
+  LData := THTTP.CodePageEnc(AData, FCodePage);
+
+  Append(LData[1], Length(AData));
 end;
 
 procedure TMultipartData.Append(const AData; ASize: Integer);
