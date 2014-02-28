@@ -14,7 +14,7 @@ interface
 
 uses
   Windows, SysUtils, Classes, WinHttp_h, ShellAPI, SHFolder, CookieMgr_u,
-  FuncLib;
+  FuncLib, DateUtils;
 
 type
 {$IFNDEF UNICODE}
@@ -668,7 +668,7 @@ begin
   if FUseTime = 0 then
   begin
     tick := GetTickCount;
-    if tick > FStartTime then
+    if tick >= FStartTime then
       FUseTime := tick - FStartTime
     else
       FUseTime := DWORD(-1) - FStartTime + tick;
@@ -999,10 +999,9 @@ begin
   Result := 0;
   try
     if (sTime <> '')
-      and WinHttpTimeToSystemTime(StringToOleStr(sTime), @sysTime) then
-      with SysTime do
-        Result := EncodeDate(wYear, wMonth, wDay + (wHour + 8) div 24) // 20110616 Fix by hou
-          + EncodeTime((wHour + 8) mod 24, wMinute, wSecond, wMilliseconds);
+      and WinHttpTimeToSystemTime(StringToOleStr(sTime), @sysTime)
+    then
+      Result := IncHour(SystemTimeToDateTime(SysTime), 8);
   except
     Result := MaxDateTime; // 一些不能识别的日期
   end;
